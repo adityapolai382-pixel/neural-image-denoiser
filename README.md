@@ -62,6 +62,14 @@ streamlit run app/app.py
 
 ---
 
+## Technical Report
+
+The complete compiled academic research report with full derivations, convergence curves, and benchmark tables is available:
+- 📄 **[Read the Full Technical Report (PDF)](report/Lab04_Image_Denoising_Report.pdf)**
+- 📝 **[LaTeX Source Code](report/Lab04_Report.tex)**
+
+---
+
 ## Repository Structure
 
 ```text
@@ -75,7 +83,9 @@ streamlit run app/app.py
 ├── notebooks/
 │   └── mnist_autoencoder_denoising.ipynb # Complete experiment workflow
 ├── report/
-│   └── Lab04_Report.tex                  # Formal LaTeX technical report
+│   ├── Lab04_Image_Denoising_Report.pdf  # Compiled full PDF report
+│   ├── Lab04_Report.tex                  # Formal LaTeX technical report
+│   └── main.tex                          # Overleaf-ready LaTeX source
 ├── requirements.txt                      # Project dependencies
 └── README.md
 ```
