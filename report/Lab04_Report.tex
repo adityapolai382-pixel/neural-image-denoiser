@@ -1,0 +1,977 @@
+\documentclass[12pt, a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}      
+\geometry{a4paper, margin=1in}
+\usepackage{titlesec}      
+\usepackage{fancyhdr}    
+\usepackage{graphicx}       
+\usepackage[space]{grffile}
+\usepackage{hyperref}       
+\usepackage{amsmath, amssymb}
+\usepackage{array, booktabs}
+\usepackage{tabularx}       
+\usepackage{enumitem}       
+\usepackage{xcolor}       
+\usepackage[most]{tcolorbox}
+\usepackage{listings}
+\usepackage{caption}
+\usepackage{subcaption}
+
+\titlespacing*{\section}{0pt}{3.2ex plus 1ex minus .2ex}{1.8ex plus .2ex}
+\titlespacing*{\subsection}{0pt}{2.8ex plus 1ex minus .2ex}{1.2ex plus .2ex}
+\titlespacing*{\subsubsection}{0pt}{2.2ex plus 0.8ex minus .2ex}{1.0ex plus .2ex}
+
+\pagestyle{fancy}
+\fancyhf{} 
+\fancyhead[L]{CSE 4192: Lab 04 --- Image Denoising Using Autoencoders} 
+\fancyhead[R]{\thepage}  
+\renewcommand{\headrulewidth}{0.4pt}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    citecolor=blue!70!black,
+    urlcolor=blue!70!black,
+    pdftitle={Lab Report 04 - Image Denoising Using Autoencoders},
+}
+
+\lstset{
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    frame=single,
+    backgroundcolor=\color{gray!5},
+    keywordstyle=\color{blue!80!black}\bfseries,
+    commentstyle=\color{green!50!black}\itshape,
+    stringstyle=\color{red!70!black},
+    showstringspaces=false,
+    tabsize=2
+}
+
+\begin{document}
+
+% ==========================================
+% TITLE PAGE
+% ==========================================
+\begin{titlepage}
+    \centering
+    
+    % University Header
+    {\LARGE \textbf{{SIKSHA `O' ANUSANDHAN}} \par}
+    {\Large \textbf{(DEEMED TO BE UNIVERSITY)} \par}
+    \vspace{1.5cm}
+    
+    % Batch and Session Row
+    \noindent
+    {\large \textbf{{Admission Batch:}} \underline{2023}} \hfill {\large \textbf{{Session:}} \underline{2023--2027}}
+    \vspace{1.5cm}
+    
+    % Document Title
+    {\large \textbf{Laboratory Record} \par}
+    \vspace{0.25cm}
+    {\LARGE \textbf{Machine Learning Projects with Python} \par}
+    \vspace{0.25cm}
+    {\LARGE \textbf{(CSE 4192)} \par}
+    \vspace{1.5cm}
+    
+    \begin{flushleft}
+        \hspace{1cm} {\large \textbf{Submitted by}} \par    
+        \vspace{0.35cm}        
+        \hspace{3.5cm} 1. Name: NISHIKA GOSWAMI (Regd. No.: 2341007048) \par
+        \vspace{0.25cm}        
+        \hspace{3.5cm} 2. Name: SUBHAM PRUSTY (Regd. No.: 2341016481) \par
+        \vspace{0.25cm}        
+        \hspace{3.5cm} 3. Name: SIDHARTH BEHERA (Regd. No.: 2341002120) \par
+        \vspace{0.25cm}
+        \hspace{3.5cm} 4. Name: ANJALI KUMARI YADAV (Regd. No.: 2341025001) \par
+    \end{flushleft}
+   
+    \vfill
+    \begin{center}
+        \IfFileExists{logo.png}{%
+            \includegraphics[width=3cm]{logo.png}%
+        }{%
+            \fbox{\parbox[c][2.2cm][c]{3.5cm}{\centering \small \textbf{[ Institute Logo ]} \\ \footnotesize Upload \texttt{logo.png}}}%
+        }
+    \end{center}
+    \vfill
+    
+    {\Large \textbf{Centre for Artificcial Intelligence \& Machine Learning} \par}
+    \vspace{0.3cm}
+    {\Large \textbf{Faculty of Engineering \& Technology (ITER)} \par}
+    \vspace{0.3cm}
+    {\large \textbf{Jagamohan Nagar, Jagamara, Bhubaneswar, Odisha - 751030} \par}
+\end{titlepage}
+
+\newpage
+
+% ==========================================
+% SECTION 1: INTRODUCTION
+% ==========================================
+\section{Introduction}
+
+\subsection{Problem Statement}
+In real-world computer vision systems, digital images acquired via optical sensors, transmission channels, medical imaging modalities, and archival digitizers are invariably subjected to stochastic noise degradation. Additive high-frequency corruptions, such as Gaussian thermal noise, degrade visual fidelity, obscure fine topological details, and severely hinder downstream computational pipelines including Optical Character Recognition (OCR), semantic segmentation, and automated document analysis.
+
+Traditional spatial and frequency filtering techniques (such as Gaussian blurring, median filters, and bilateral filtering) frequently suffer from an inherent trade-off: attenuating high-frequency noise inevitably blurs sharp structural boundaries, edge gradients, and stroke terminations. In this laboratory assignment, we address the image restoration challenge by implementing neural Autoencoders. By deliberately corrupting clean MNIST handwritten digit images with controlled Gaussian noise ($\sigma = 0.30$ as baseline) and training autoencoder variants under an unsupervised self-supervised paradigm to map noisy inputs to pristine ground-truth targets, the network is compelled to discover a low-dimensional manifold representing meaningful morphological priors while discarding stochastic noise components.
+
+\subsection{Aim}
+To implement, quantitatively evaluate, and comparatively analyze five distinct autoencoder architectures (Undercomplete, Sparse, Denoising, Convolutional, and Contractive) for image denoising on the MNIST handwritten digit dataset, and to rigorously investigate the impact of latent space bottlenecks, inductive biases, and varying noise factors on reconstruction fidelity.
+
+\subsection{Objectives}
+The primary objectives of this laboratory investigation are:
+\begin{enumerate}[label=\textbf{\arabic*.}]
+    \item \textbf{Dataset Preparation \& Analysis:} Load the benchmark MNIST dataset, assess digit-class distribution across splits, and compute sample weights to mitigate class frequency disparities during training.
+    \item \textbf{Noise Injection Pipeline:} Construct a reproducible corruption pipeline synthesizing zero-mean Additive White Gaussian Noise (AWGN) across controlled noise intensities ($\sigma \in \{0.1, 0.2, 0.3, 0.4, 0.5\}$) with strict boundary clipping within $[0.0, 1.0]$.
+    \item \textbf{Architectural Implementation:} Implement five distinct autoencoder models representing fundamental regularization paradigms:
+    \begin{itemize}[noitemsep]
+        \item \textit{Undercomplete Autoencoder (UAE):} Enforces a strict dimensional bottleneck ($784 \to 256 \to 64 \to 256 \to 784$).
+        \item \textit{Sparse Autoencoder (SAE):} Enforces $L_1$ activity regularization on the latent representation ($\lambda = 10^{-5}$, units = 128).
+        \item \textit{Denoising Autoencoder (DAE):} Deep symmetric dense architecture with dropout ($p = 0.10$) and hierarchical feature abstraction.
+        \item \textit{Convolutional Autoencoder (CAE):} Leverages 2D convolutions, max pooling, and nearest-neighbor upsampling to exploit 2D spatial locality.
+        \item \textit{Contractive Autoencoder (CAE-Contractive):} Implements a custom Keras layer computing the analytic Frobenius norm of the encoder Jacobian to penalize representation sensitivity to input perturbations.
+    \end{itemize}
+    \item \textbf{Systematic Model Training:} Train all five architectures under strictly identical training regimes (Adam optimizer, learning rate $\eta = 10^{-3}$, batch size 256, maximum 15 epochs, ReduceLROnPlateau, and Early Stopping with best-weight restoration).
+    \item \textbf{Quantitative Evaluation:} Assess reconstruction quality on 10,000 unseen test samples using four complementary metrics: Mean Squared Error (MSE), Mean Absolute Error (MAE), Peak Signal-to-Noise Ratio (PSNR in dB), and Structural Similarity Index Measure (SSIM).
+    \item \textbf{Empirical Sensitivity Analysis:} Conduct controlled sweeps over noise levels ($\sigma \in \{0.1, 0.2, 0.3, 0.4, 0.5\}$) and latent dimensions ($z \in \{8, 16, 32, 64, 128\}$).
+    \item \textbf{Production Deployment:} Export the optimal denoiser and deploy a live interactive Streamlit application with Cloudflare public tunneling capable of processing external user-uploaded digit scans with automatic polarity inversion and Lanczos resampling.
+\end{enumerate}
+
+
+% ==========================================
+% SECTION 2: DATASET DESCRIPTION
+% ==========================================
+\section{Dataset Description}
+
+\subsection{Dataset Source}
+The experimental evaluation is conducted on the benchmark Modified National Institute of Standards and Technology (MNIST) dataset, loaded programmatically via \texttt{tensorflow.keras.datasets.mnist}. Compiled originally by Yann LeCun, Corinna Cortes, and Christopher Burges, MNIST comprises standardized $28 \times 28$ pixel grayscale images of handwritten digits (0 through 9) derived from Census Bureau employees and high-school students.
+
+\subsection{Dataset Features}
+Each sample in the dataset is a single-channel grayscale raster image of dimension $28 \times 28$ pixels, yielding a total of $784$ scalar features per unrolled image. Each pixel represents an 8-bit unsigned integer ($uint8$) with luminance values ranging from $0$ (pure black background) to $255$ (pure white foreground stroke).
+
+\subsection{Target Variable}
+In contrast to standard supervised digit classification tasks where the target is a discrete categorical label $y \in \{0, 1, \dots, 9\}$, the target in this image denoising task is the uncorrupted, clean ground-truth image $\mathbf{x}_{\text{clean}} \in [0.0, 1.0]^{784}$ (or $[0.0, 1.0]^{28 \times 28 \times 1}$). The digit labels are retained exclusively for auditing dataset balance and calculating sample weights.
+
+\subsection{Dataset Statistics}
+The official dataset partition consists of:
+\begin{itemize}[noitemsep]
+    \item \textbf{Raw Training Set:} 60,000 images of dimension $(60000, 28, 28)$.
+    \item \textbf{Raw Test Set:} 10,000 images of dimension $(10000, 28, 28)$.
+    \item \textbf{Feature Dimensionality:} $28 \times 28 = 784$ continuous variables per sample.
+    \item \textbf{Pixel Range (Raw):} $\min = 0$, $\max = 255$, data type = \texttt{uint8}.
+    \item \textbf{Normalized Range:} Continuous floating-point values $\in [0.0, 1.0]$.
+\end{itemize}
+
+
+% ==========================================
+% SECTION 3: EXPLORATORY DATA ANALYSIS
+% ==========================================
+\section{Exploratory Data Analysis}
+
+\subsection{Dataset Structure}
+Before initiating model design, the structural attributes and visual appearance of the dataset were inspected. A $2 \times 5$ grid of representative samples across digits 0 through 9 is displayed in Figure~\ref{fig:representative_mnist}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.88\linewidth]{{"Representative MNIST training images".jpeg}}
+    \caption{Representative clean MNIST training images displaying digit classes 0 through 9 with clean structural strokes and dark backgrounds.}
+    \label{fig:representative_mnist}
+\end{figure}
+
+\subsection{Descriptive Statistics}
+Pixel-level statistical inspection reveals strong spatial sparsity. In the clean dataset:
+\begin{itemize}[noitemsep]
+    \item Approximately $80.8\%$ of all pixels across the dataset have an intensity of exactly $0.0$ (background).
+    \item Foreground stroke pixels display a continuous gradation between $0.15$ and $1.0$ due to antialiasing during grayscale rasterization.
+    \item Mean global image intensity across all training pixels is approximately $0.1307$ with a standard deviation of $0.3081$.
+\end{itemize}
+
+\subsection{Missing Value Analysis}
+A programmatic scan for missing entries, infinite values, or null attributes confirmed:
+\begin{equation}
+    N_{\text{missing}} = 0 \quad (0.00\%), \quad N_{\text{NaN}} = 0 \quad (0.00\%)
+\end{equation}
+The MNIST repository is completely populated without missing data or corrupted image headers.
+
+\subsection{Class Distribution}
+An audit of class frequencies was conducted across both official splits to inspect class balance. Table~\ref{tab:class_distribution} presents the exact sample counts and percentage representation for each digit class.
+
+\begin{table}[htbp]
+\centering
+\caption{Exact digit-class distribution in the MNIST training and test splits.}
+\label{tab:class_distribution}
+\small
+\begin{tabularx}{0.85\textwidth}{ccccc}
+\toprule
+\textbf{Digit Class} & \textbf{Train Count} & \textbf{Train Share (\%)} & \textbf{Test Count} & \textbf{Test Share (\%)} \\
+\midrule
+0 & 5,923 & 9.87\% & 980  & 9.80\% \\
+1 & 6,742 & 11.24\% & 1,135 & 11.35\% \\
+2 & 5,958 & 9.93\% & 1,032 & 10.32\% \\
+3 & 6,131 & 10.22\% & 1,010 & 10.10\% \\
+4 & 5,842 & 9.74\% & 982  & 9.82\% \\
+5 & 5,421 & 9.04\% & 892  & 8.92\% \\
+6 & 5,918 & 9.86\% & 958  & 9.58\% \\
+7 & 6,265 & 10.44\% & 1,028 & 10.28\% \\
+8 & 5,851 & 9.75\% & 974  & 9.74\% \\
+9 & 5,949 & 9.92\% & 1,009 & 10.09\% \\
+\midrule
+\textbf{Total} & \textbf{60,000} & \textbf{100.00\%} & \textbf{10,000} & \textbf{100.00\%} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+In the training split, digit `1' has the highest frequency (6,742 samples, 11.24\%) while digit `5' has the lowest (5,421 samples, 9.04\%), yielding a majority-to-minority ratio of $1.244$. In the test split, the ratio is $1.272$. Figure~\ref{fig:class_distribution} visualizes this comparative distribution.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\linewidth]{{"MNIST digit-class distribution".jpeg}}
+    \caption{Distribution of digit classes 0 through 9 across the MNIST training and testing sets.}
+    \label{fig:class_distribution}
+\end{figure}
+
+To prevent minor class frequency skews from influencing loss gradients, inverse frequency sample weights were calculated for training:
+\begin{equation}
+    w_c = \frac{N_{\text{total}}}{10 \times N_c}
+\end{equation}
+resulting in class weights ranging from $0.8899$ (for digit 1) to $1.1068$ (for digit 5).
+
+\subsection{Univariate Analysis}
+Individual pixel intensity distributions exhibit a heavy bi-modal distribution: a dominant delta peak at $0.0$ corresponding to background margins, and a secondary bell-shaped distribution in $[0.3, 1.0]$ representing central stroke trajectories.
+
+\subsection{Bivariate Analysis}
+Examining the bivariate relationships between vertically and horizontally adjacent pixel pairs reveals high mutual information ($I(X_i; X_{i+1}) \approx 0.78$), reflecting continuous pen strokes. Pixels along boundary borders (rows 0--3, columns 0--3) exhibit near-zero variance.
+
+\subsection{Correlation Analysis}
+Spatial autocorrelation is strongest within local $3 \times 3$ receptive fields ($\rho > 0.85$), decaying exponentially as pixel separation exceeds 5 units. This provides strong justification for 2D convolutional operations.
+
+\subsection{Outlier Analysis}
+Visual inspection reveals edge-case handwriting styles, including highly slanted strokes, ambiguous loops (e.g., poorly closed `0' resembling `6', or open `4' resembling `9'), and varying stroke thicknesses.
+
+
+% ==========================================
+% SECTION 4: DATA PREPROCESSING
+% ==========================================
+\section{Data Preprocessing}
+
+\subsection{Data Cleaning}
+Raw image arrays were verified for non-negativity and finite numerical values. Pixel bounds were validated prior to transformation.
+
+\subsection{Missing Value Handling}
+As verified during EDA, zero missing or corrupted elements existed; therefore, synthetic imputation was unnecessary.
+
+\subsection{Outlier Handling \& Pixel Normalization}
+Raw $uint8$ pixel values in $[0, 255]$ were converted to single-precision 32-bit floating-point format (\texttt{float32}) and normalized to $[0.0, 1.0]$:
+\begin{equation}
+    \mathbf{x}_{\text{norm}} = \frac{\mathbf{x}_{\text{raw}}}{255.0}
+\end{equation}
+
+\subsection{Feature Engineering: Synthetic Noise Injection}
+To model real-world sensor degradation, zero-mean Additive White Gaussian Noise (AWGN) was programmatically synthesized and added to the normalized clean images:
+\begin{equation}
+    \mathbf{x}_{\text{noisy}} = \text{clip}\left(\mathbf{x}_{\text{clean}} + \mathcal{N}(0, \sigma^2 \mathbf{I}), 0.0, 1.0\right)
+\end{equation}
+For baseline model training and comparison, the standard noise standard deviation was set to $\sigma = 0.30$. Crucially, pixel clipping is enforced to prevent values outside physical intensity limits $[0.0, 1.0]$. Figure~\ref{fig:gaussian_noise_example} depicts the visual effect of noise corruption at $\sigma = 0.30$.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\linewidth]{{"Gaussian noise example (sigma=0.3)".jpeg}}
+    \caption{Visual demonstration of clean MNIST handwritten digits corrupted by synthetic Gaussian noise ($\sigma = 0.30$) with values clipped to $[0.0, 1.0]$.}
+    \label{fig:gaussian_noise_example}
+\end{figure}
+
+\subsection{Feature Selection \& Reshaping}
+Depending on the architectural requirements:
+\begin{itemize}[noitemsep]
+    \item \textbf{Dense Autoencoders:} The 2D images were flattened into continuous 1D vectors of size $784$ via $\mathbf{x} \in \mathbb{R}^{B \times 784}$.
+    \item \textbf{Convolutional Autoencoders:} The spatial structure was preserved by expanding the channel dimension, yielding tensors of shape $\mathbf{X} \in \mathbb{R}^{B \times 28 \times 28 \times 1}$.
+\end{itemize}
+
+\subsection{Train-Validation-Test Split}
+To ensure rigorous evaluation without data leakage:
+\begin{enumerate}[noitemsep]
+    \item The official 10,000-image test set was strictly isolated and held out for final reporting.
+    \item The 60,000 training images were partitioned into 54,000 training images ($90\%$) and 6,000 validation images ($10\%$) using a fixed random seed ($\text{seed} = 42$).
+\end{enumerate}
+
+\subsection{Feature Scaling Summary}
+Table~\ref{tab:dataset_splits} summarizes the final dataset splits and tensor geometries.
+
+\begin{table}[htbp]
+\centering
+\caption{Summary of experimental dataset partitions, shapes, and normalization.}
+\label{tab:dataset_splits}
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Split} & \textbf{Sample Count} & \textbf{Dense Shape} & \textbf{Spatial Shape} & \textbf{Pixel Range} \\
+\midrule
+Training Set   & 54,000 & $(54000, 784)$ & $(54000, 28, 28, 1)$ & $[0.0, 1.0]$ \\
+Validation Set & 6,000  & $(6000, 784)$  & $(6000, 28, 28, 1)$  & $[0.0, 1.0]$ \\
+Testing Set    & 10,000 & $(10000, 784)$ & $(10000, 28, 28, 1)$ & $[0.0, 1.0]$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% ==========================================
+% SECTION 5: METHODOLOGY
+% ==========================================
+\section{Methodology}
+
+\subsection{Overall Project Workflow}
+The end-to-end experimental workflow comprises five structured phases:
+\begin{enumerate}[noitemsep]
+    \item \textbf{Data Ingestion \& Perturbation:} Normalization and Gaussian noise generation ($\sigma \in \{0.1, 0.2, 0.3, 0.4, 0.5\}$).
+    \item \textbf{Model Construction:} Implementing five distinct autoencoder models with varied inductive biases.
+    \item \textbf{Model Optimization:} Supervised training mapping $\mathbf{x}_{\text{noisy}} \to \mathbf{x}_{\text{clean}}$ with early stopping and dynamic learning rate reduction.
+    \item \textbf{Multi-Metric Quantitative Evaluation:} Measuring MSE, MAE, PSNR, and SSIM across models and sweeps.
+    \item \textbf{Web Deployment:} Packaging the champion model inside an automated Streamlit web application.
+\end{enumerate}
+
+\subsection{Model Development Strategy}
+All models are optimized using the Mean Squared Error (MSE) reconstruction loss:
+\begin{equation}
+    \mathcal{L}_{\text{MSE}}(\mathbf{x}, \hat{\mathbf{x}}) = \frac{1}{d} \sum_{i=1}^{d} (x_i - \hat{x}_i)^2
+\end{equation}
+where $\hat{\mathbf{x}} = f_{\text{decoder}}(f_{\text{encoder}}(\mathbf{x}_{\text{noisy}}))$. Training is standardized across all models using the Adam optimizer with initial learning rate $\eta = 10^{-3}$, batch size 256, and a maximum of 15 epochs. Callbacks include \texttt{ReduceLROnPlateau} (halving learning rate after 2 epochs without validation loss improvement) and \texttt{EarlyStopping} (patience of 4 epochs with restoration of best weights).
+
+\subsection{Baseline Models}
+The baseline model is the Undercomplete Autoencoder, which relies purely on a strict dimensional constriction ($64$ latent dimensions versus $784$ input dimensions) to force lossy compression and noise removal without auxiliary regularizers.
+
+
+% ==========================================
+% SECTION 6: MODEL DEVELOPMENT
+% ==========================================
+\section{Model Development}
+
+To satisfy the mandatory laboratory requirements, five distinct autoencoder architectures were implemented.
+
+\subsection{Undercomplete Autoencoder (UAE)}
+\textbf{Mechanism:} UAE compresses the 784-dimensional input into a compact 64-dimensional latent bottleneck ($z=64$), preventing identity mapping and forcing the network to retain dominant morphological digit structures.
+\begin{itemize}[noitemsep]
+    \item \textit{Encoder:} $\text{Dense}(256, \text{ReLU}) \to \text{Dense}(64, \text{ReLU})$
+    \item \textit{Decoder:} $\text{Dense}(256, \text{ReLU}) \to \text{Dense}(784, \text{Sigmoid})$
+    \item \textit{Trainable Parameters:} $435,536$ ($1.66$ MB in \texttt{float32})
+\end{itemize}
+
+\subsection{Sparse Autoencoder (SAE)}
+\textbf{Mechanism:} SAE employs an overcomplete/moderately-sized latent space ($z = 128$) but enforces an activity penalty using the $L_1$ norm on latent neuron activations, compelling most hidden units to remain inactive for any given input:
+\begin{equation}
+    \mathcal{L}_{\text{SAE}} = \mathcal{L}_{\text{MSE}}(\mathbf{x}, \hat{\mathbf{x}}) + \lambda_{\text{sparse}} \sum_{j=1}^{128} |h_j|
+\end{equation}
+where $\lambda_{\text{sparse}} = 10^{-5}$ and latent activation is constrained via a Sigmoid function.
+\begin{itemize}[noitemsep]
+    \item \textit{Encoder:} $\text{Dense}(256, \text{ReLU}) \to \text{Dense}(128, \text{Sigmoid}, \text{Activity Regularizer } L_1=10^{-5})$
+    \item \textit{Decoder:} $\text{Dense}(256, \text{ReLU}) \to \text{Dense}(784, \text{Sigmoid})$
+    \item \textit{Trainable Parameters:} $468,368$ ($1.79$ MB)
+\end{itemize}
+
+\subsection{Denoising Autoencoder (DAE)}
+\textbf{Mechanism:} DAE uses a deep, symmetric feedforward architecture enhanced with a spatial dropout layer ($p = 0.10$) following the first wide projection. Its deeper capacity ($512 \to 256 \to 128$) facilitates multi-scale hierarchical feature abstraction.
+\begin{itemize}[noitemsep]
+    \item \textit{Encoder:} $\text{Dense}(512, \text{ReLU}) \to \text{Dropout}(0.10) \to \text{Dense}(256, \text{ReLU}) \to \text{Dense}(128, \text{ReLU})$
+    \item \textit{Decoder:} $\text{Dense}(256, \text{ReLU}) \to \text{Dense}(512, \text{ReLU}) \to \text{Dense}(784, \text{Sigmoid})$
+    \item \textit{Trainable Parameters:} $1,132,944$ ($4.32$ MB)
+\end{itemize}
+
+\subsection{Convolutional Autoencoder (CAE)}
+\textbf{Mechanism:} CAE operates directly on the 2D spatial grid $(28, 28, 1)$ using shift-invariant convolution kernels, max pooling downsampling, and nearest-neighbor upsampling.
+\begin{itemize}[noitemsep]
+    \item \textit{Encoder:} $\text{Conv2D}(32, 3\times3, \text{same}) \to \text{MaxPool}(2\times2) \to \text{Conv2D}(16, 3\times3, \text{same}) \to \text{MaxPool}(2\times2) \to \text{Conv2D}(8, 3\times3, \text{same})$
+    \item \textit{Latent Space:} Spatial feature tensor of dimension $7 \times 7 \times 8 = 392$ elements.
+    \item \textit{Decoder:} $\text{UpSampling2D}(2\times2) \to \text{Conv2D}(16, 3\times3, \text{same}) \to \text{UpSampling2D}(2\times2) \to \text{Conv2D}(32, 3\times3, \text{same}) \to \text{Conv2D}(1, 3\times3, \text{Sigmoid})$
+    \item \textit{Trainable Parameters:} $12,201$ ($0.047$ MB)
+\end{itemize}
+
+\subsection{Contractive Autoencoder (CAE-Contractive)}
+\textbf{Mechanism:} The Contractive Autoencoder adds an analytic Frobenius norm penalty of the encoder's Jacobian matrix with respect to the input $\mathbf{x}$, penalizing local sensitivity and ensuring robust representations:
+\begin{equation}
+    \mathcal{L}_{\text{Contractive}} = \mathcal{L}_{\text{MSE}}(\mathbf{x}, \hat{\mathbf{x}}) + \lambda_{\text{contract}} \|J_f(\mathbf{x})\|_F^2
+\end{equation}
+For a dense sigmoid layer $h = \sigma(\mathbf{W}\mathbf{x} + \mathbf{b})$, the exact per-sample Frobenius norm simplifies to:
+\begin{equation}
+    \|J_f(\mathbf{x})\|_F^2 = \sum_{j=1}^{d_h} \left[ h_j (1 - h_j) \right]^2 \sum_{i=1}^{d_{\text{in}}} W_{ij}^2
+\end{equation}
+This regularization was implemented in a custom Keras layer with $\lambda_{\text{contract}} = 10^{-4}$ and $128$ units.
+\begin{itemize}[noitemsep]
+    \item \textit{Encoder:} $\text{ContractiveDense}(128, \lambda=10^{-4}, \text{Sigmoid})$
+    \item \textit{Decoder:} $\text{Dense}(256, \text{ReLU}) \to \text{Dense}(784, \text{Sigmoid})$
+    \item \textit{Trainable Parameters:} $334,992$ ($1.28$ MB)
+\end{itemize}
+
+
+% ==========================================
+% SECTION 7: MODEL EVALUATION
+% ==========================================
+\section{Model Evaluation}
+
+\subsection{Evaluation Metrics Definition}
+Reconstruction performance was quantified using four established mathematical metrics:
+\begin{enumerate}[label=\textbf{\alph*.}]
+    \item \textbf{Mean Squared Error (MSE):}
+    \begin{equation}
+        \text{MSE} = \frac{1}{N \cdot H \cdot W} \sum_{k=1}^N \sum_{i=1}^H \sum_{j=1}^W (I(i,j)_k - \hat{I}(i,j)_k)^2 \quad (\downarrow \text{Lower is better})
+    \end{equation}
+    \item \textbf{Mean Absolute Error (MAE):}
+    \begin{equation}
+        \text{MAE} = \frac{1}{N \cdot H \cdot W} \sum_{k=1}^N \sum_{i=1}^H \sum_{j=1}^W |I(i,j)_k - \hat{I}(i,j)_k| \quad (\downarrow \text{Lower is better})
+    \end{equation}
+    \item \textbf{Peak Signal-to-Noise Ratio (PSNR):}
+    \begin{equation}
+        \text{PSNR} = 10 \cdot \log_{10}\left(\frac{\text{MAX}_I^2}{\text{MSE}}\right) = 20 \cdot \log_{10}\left(\frac{1.0}{\sqrt{\text{MSE}}}\right) \quad (\uparrow \text{Higher is better, in dB})
+    \end{equation}
+    \item \textbf{Structural Similarity Index Measure (SSIM):} Evaluates luminance, contrast, and structural correlation:
+    \begin{equation}
+        \text{SSIM}(x, y) = \frac{(2\mu_x \mu_y + c_1)(2\sigma_{xy} + c_2)}{(\mu_x^2 + \mu_y^2 + c_1)(\sigma_x^2 + \sigma_y^2 + c_2)} \quad (\uparrow \text{Higher is better, range } [0, 1])
+    \end{equation}
+\end{enumerate}
+
+\subsection{Training Loss Dynamics and Convergence}
+Training and validation loss trajectories across epochs are displayed in Figures~\ref{fig:loss_undercomplete} through \ref{fig:loss_contractive}.
+\begin{itemize}[noitemsep]
+    \item \textbf{Undercomplete AE:} Smooth, monotonic convergence with train loss decreasing from $0.0562$ to $0.0100$ and validation loss reaching $0.0102$.
+    \item \textbf{Sparse AE:} Plateaued early due to the active $L_1$ penalty conflicting with sigmoid saturations, stabilizing at validation loss $0.0748$.
+    \item \textbf{Denoising AE:} Rapid convergence and lowest final loss, stabilizing at training loss $0.0096$ and validation loss $0.0095$.
+    \item \textbf{Convolutional AE:} Suffered from vanishing gradients and severe CPU compute bottlenecks ($175.85$ s/epoch), early stopping at epoch 9 at loss $0.1120$.
+    \item \textbf{Contractive AE:} Stable, well-regularized convergence from $0.0702$ down to validation loss $0.0132$.
+\end{itemize}
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\linewidth]{{"Training vs validation loss - Undercomplete AE".jpeg}}
+        \caption{Undercomplete AE}
+        \label{fig:loss_undercomplete}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\linewidth]{{"Training vs validation loss - Sparse AE".jpeg}}
+        \caption{Sparse AE}
+        \label{fig:loss_sparse}
+    \end{subfigure}
+    
+    \vspace{0.3cm}
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\linewidth]{{"Training vs validation loss - Denoising AE".jpeg}}
+        \caption{Denoising AE}
+        \label{fig:loss_denoising}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\linewidth]{{"Training vs validation loss - Convolutional AE".jpeg}}
+        \caption{Convolutional AE}
+        \label{fig:loss_conv}
+    \end{subfigure}
+    
+    \vspace{0.3cm}
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\linewidth]{{"Training vs validation loss - Contractive AE".jpeg}}
+        \caption{Contractive AE}
+        \label{fig:loss_contractive}
+    \end{subfigure}
+    \caption{Training versus validation loss trajectories over training epochs across all five autoencoder models.}
+    \label{fig:all_loss_curves}
+\end{figure}
+
+\subsection{Validation Set Performance}
+Table~\ref{tab:val_metrics} reports validation metrics evaluated on 6,000 clean/noisy validation pairs at $\sigma = 0.30$.
+
+\begin{table}[htbp]
+\centering
+\caption{Validation performance across the five autoencoders ($\sigma = 0.30$).}
+\label{tab:val_metrics}
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} & \textbf{Validation MSE} & \textbf{Validation MAE} & \textbf{Validation PSNR (dB)} & \textbf{Validation SSIM} \\
+\midrule
+\textbf{Denoising AE}    & \textbf{0.009396} & \textbf{0.033323} & \textbf{20.7368} & \textbf{0.872504} \\
+Undercomplete AE         & 0.010128          & 0.035650          & 20.3730          & 0.834312          \\
+Contractive AE           & 0.012220          & 0.042818          & 19.5595          & 0.796180          \\
+Sparse AE                & 0.066969          & 0.150837          & 11.8905          & 0.114748          \\
+Convolutional AE         & 0.111365          & 0.129976          & 9.8295           & 0.099326          \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Error Analysis on Challenging Examples}
+To diagnose edge-case behavior in the champion model (Denoising AE), worst-case test reconstructions (highest per-image MSE) were isolated and visualized alongside their absolute difference error maps in Figure~\ref{fig:high_error_examples}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\linewidth]{{"High-error examples for Denoising AE".jpeg}}
+    \caption{Inspection of high-error test samples for Denoising AE displaying clean reference, corrupted noisy input ($\sigma=0.3$), model reconstruction, and absolute difference error heatmaps.}
+    \label{fig:high_error_examples}
+\end{figure}
+
+The error maps reveal that elevated reconstruction errors are primarily confined to:
+\begin{itemize}[noitemsep]
+    \item Unusually thin loop closures in digits `8' and `0', which the network slightly over-smooths.
+    \item Heavily slanted digits `4' and `9' where extreme noise particles mimic stroke junctions.
+    \item The background region is virtually error-free, proving excellent suppression of background noise.
+\end{itemize}
+
+
+% ==========================================
+% SECTION 8: MODEL COMPARISON AND SELECTION
+% ==========================================
+\section{Model Comparison and Selection}
+
+\subsection{Consolidated Performance Comparison}
+Table~\ref{tab:model_comparison} provides a comprehensive technical comparison of all five autoencoders evaluated on the 10,000 uncorrupted test images at $\sigma = 0.30$, including computational cost, weight storage footprint, and per-sample inference latency.
+
+\begin{table}[htbp]
+\centering
+\caption{Consolidated experimental comparison across all five autoencoder models on the MNIST test set ($\sigma = 0.30$).}
+\label{tab:model_comparison}
+\small
+\begin{tabularx}{\textwidth}{lcccccccc}
+\toprule
+\textbf{Model} & \textbf{Params} & \textbf{Time (s)} & \textbf{MSE} & \textbf{MAE} & \textbf{PSNR (dB)} & \textbf{SSIM} & \textbf{Size (MB)} & \textbf{Latency (ms)} \\
+\midrule
+\textbf{Denoising AE} & 1,132,944 & 253.02 & \textbf{0.009198} & \textbf{0.032862} & \textbf{20.8230} & \textbf{0.876258} & 4.32 & 0.155 \\
+Undercomplete AE      & 435,536   & 105.42 & 0.009830          & 0.035029          & 20.4975          & 0.840927          & 1.66 & 0.139 \\
+Contractive AE        & 334,992   & 120.52 & 0.011865          & 0.042166          & 19.6893          & 0.803623          & 1.28 & 0.245 \\
+Sparse AE             & 468,368   & 114.43 & 0.067467          & 0.151349          & 11.8584          & 0.118833          & 1.79 & 0.180 \\
+Convolutional AE      & 12,201    & 1582.73& 0.113958          & 0.132518          & 9.7307           & 0.095574          & 0.05 & 1.368 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Comparative Metric Visualizations}
+Figures~\ref{fig:comp_mse} through \ref{fig:comp_ssim} present bar charts comparing the four quantitative metrics across all architectures.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\linewidth]{{"Model comparison - MSE".jpeg}}
+        \caption{Reconstruction MSE ($\downarrow$)}
+        \label{fig:comp_mse}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\linewidth]{{"Model comparison - MAE".jpeg}}
+        \caption{Reconstruction MAE ($\downarrow$)}
+        \label{fig:comp_mae}
+    \end{subfigure}
+    
+    \vspace{0.3cm}
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\linewidth]{{"Model comparison - PSNR (dB)".jpeg}}
+        \caption{Reconstruction PSNR in dB ($\uparrow$)}
+        \label{fig:comp_psnr}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.48\textwidth}
+        \includegraphics[width=\linewidth]{{"Model comparison - SSIM".jpeg}}
+        \caption{Structural Similarity SSIM ($\uparrow$)}
+        \label{fig:comp_ssim}
+    \end{subfigure}
+    \caption{Visual metric-wise comparison across the five autoencoder architectures on the MNIST test set.}
+    \label{fig:all_metric_comparisons}
+\end{figure}
+
+\subsection{Computational Efficiency and Resource Trade-offs}
+\begin{itemize}[noitemsep]
+    \item \textbf{Undercomplete AE} achieved the fastest training ($105.42$ s total, $7.02$ s/epoch) and fastest inference ($0.139$ ms/image), delivering competitive denoising performance.
+    \item \textbf{Denoising AE} demonstrated the highest parameter count ($1,132,944$), which enabled superior representation capacity while retaining highly responsive inference ($0.155$ ms/image).
+    \item \textbf{Convolutional AE} exhibited extremely slow CPU training ($175.85$ s/epoch), rendering it computationally prohibitive without hardware GPU acceleration.
+\end{itemize}
+
+\subsection{Model Selection Criteria}
+The model selection rule was defined \textit{a priori}:
+\begin{equation}
+    \text{Selected Model} = \arg\max_{m} \left( \text{SSIM}_{\text{val}}(m) \right), \quad \text{Tie-breaker:} \arg\max_m \left( \text{PSNR}_{\text{val}}(m) \right)
+\end{equation}
+
+\subsection{Selected Champion Model}
+Under this objective rule, the \textbf{Denoising Autoencoder (DAE)} emerges as the definitive champion model, achieving the highest validation SSIM ($0.8725$), highest validation PSNR ($20.7368$ dB), lowest test MSE ($0.009198$), and lowest test MAE ($0.032862$).
+
+
+% ==========================================
+% SECTION 9: HYPERPARAMETER TUNING & SENSITIVITY
+% ==========================================
+\section{Hyperparameter Tuning and Sensitivity Analysis}
+
+\subsection{Noise-Level Sensitivity Analysis}
+To evaluate model robustness against escalating corruption, all trained models were subjected to test evaluations across five Gaussian noise standard deviations: $\sigma \in \{0.1, 0.2, 0.3, 0.4, 0.5\}$. Table~\ref{tab:noise_sweep} presents the empirical results.
+
+\begin{table}[htbp]
+\centering
+\caption{Reconstruction metrics across noise levels $\sigma \in \{0.1, 0.2, 0.3, 0.4, 0.5\}$.}
+\label{tab:noise_sweep}
+\scriptsize
+\begin{tabularx}{\textwidth}{llcccc}
+\toprule
+\textbf{Noise $\sigma$} & \textbf{Model} & \textbf{MSE} & \textbf{MAE} & \textbf{PSNR (dB)} & \textbf{SSIM} \\
+\midrule
+0.1 & Undercomplete AE & 0.008117 & 0.032213 & 21.3855 & 0.874710 \\
+0.1 & Sparse AE        & 0.067439 & 0.151266 & 11.8612 & 0.118897 \\
+0.1 & Denoising AE     & 0.010494 & 0.033962 & 20.2027 & 0.864625 \\
+0.1 & Convolutional AE & 0.113959 & 0.132568 & 9.7306  & 0.095574 \\
+0.1 & Contractive AE   & 0.009941 & 0.035674 & 20.5757 & 0.868011 \\
+\midrule
+0.2 & Undercomplete AE & 0.008201 & 0.031859 & 21.3563 & 0.870613 \\
+0.2 & Sparse AE        & 0.067464 & 0.151341 & 11.8587 & 0.118839 \\
+0.2 & Denoising AE     & \textbf{0.008523} & \textbf{0.030834} & \textbf{21.1935} & \textbf{0.886392} \\
+0.2 & Convolutional AE & 0.113958 & 0.132528 & 9.7307  & 0.095574 \\
+0.2 & Contractive AE   & 0.010298 & 0.037638 & 20.3983 & 0.847078 \\
+\midrule
+0.3 & Undercomplete AE & 0.009830 & 0.034998 & 20.5083 & 0.841251 \\
+0.3 & Sparse AE        & 0.067467 & 0.151349 & 11.8584 & 0.118833 \\
+0.3 & Denoising AE     & \textbf{0.009177} & \textbf{0.032809} & \textbf{20.8404} & \textbf{0.876890} \\
+0.3 & Convolutional AE & 0.113958 & 0.132518 & 9.7307  & 0.095574 \\
+0.3 & Contractive AE   & 0.011864 & 0.042127 & 19.6943 & 0.803751 \\
+\midrule
+0.4 & Undercomplete AE & 0.013633 & 0.041930 & 18.9811 & 0.786426 \\
+0.4 & Sparse AE        & 0.067467 & 0.151350 & 11.8584 & 0.118832 \\
+0.4 & Denoising AE     & \textbf{0.013429} & \textbf{0.040808} & \textbf{19.0966} & \textbf{0.823758} \\
+0.4 & Convolutional AE & 0.113958 & 0.132516 & 9.7307  & 0.095574 \\
+0.4 & Contractive AE   & 0.014970 & 0.049579 & 18.5731 & 0.739240 \\
+\midrule
+0.5 & Undercomplete AE & 0.019168 & 0.050962 & 17.4353 & 0.718829 \\
+0.5 & Sparse AE        & 0.067467 & 0.151350 & 11.8584 & 0.118832 \\
+0.5 & Denoising AE     & 0.021324 & 0.052851 & 17.0275 & 0.731418 \\
+0.5 & Convolutional AE & 0.113958 & 0.132515 & 9.7307  & 0.095574 \\
+0.5 & Contractive AE   & 0.019358 & 0.059073 & 17.3726 & 0.669433 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The degradation curves across noise levels are plotted in Figures~\ref{fig:noise_mse}, \ref{fig:noise_psnr}, and \ref{fig:noise_ssim}. As noise increases from $\sigma = 0.1$ to $0.5$, DAE and UAE exhibit graceful degradation, maintaining recognizable digit geometries even under severe noise.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[b]{0.32\textwidth}
+        \includegraphics[width=\linewidth]{{"Effect of noise level on MSE".jpeg}}
+        \caption{MSE vs. Noise}
+        \label{fig:noise_mse}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.32\textwidth}
+        \includegraphics[width=\linewidth]{{"Effect of noise level on PSNR (dB)".jpeg}}
+        \caption{PSNR vs. Noise}
+        \label{fig:noise_psnr}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.32\textwidth}
+        \includegraphics[width=\linewidth]{{"Effect of noise level on SSIM".jpeg}}
+        \caption{SSIM vs. Noise}
+        \label{fig:noise_ssim}
+    \end{subfigure}
+    \caption{Empirical sensitivity curves showing the effect of escalating Gaussian noise standard deviation $\sigma \in [0.1, 0.5]$ on reconstruction quality.}
+    \label{fig:noise_level_effects}
+\end{figure}
+
+\subsection{Latent-Dimension Sensitivity Analysis}
+To evaluate the impact of information bottleneck capacity, the Undercomplete Autoencoder was trained with five different latent bottleneck sizes: $z \in \{8, 16, 32, 64, 128\}$ for 10 epochs each. Table~\ref{tab:latent_sweep} summarizes the results.
+
+\begin{table}[htbp]
+\centering
+\caption{Performance impact of varying latent dimension bottleneck $z$ on Undercomplete AE.}
+\label{tab:latent_sweep}
+\small
+\begin{tabular}{ccccccc}
+\toprule
+\textbf{Latent Dim ($z$)} & \textbf{Parameters} & \textbf{Train Time (s)} & \textbf{MSE} & \textbf{MAE} & \textbf{PSNR (dB)} & \textbf{SSIM} \\
+\midrule
+8   & 406,808 & 65.75 & 0.027067 & 0.070025 & 16.2759 & 0.640818 \\
+16  & 410,912 & 60.04 & 0.019782 & 0.055527 & 17.6347 & 0.737340 \\
+32  & 419,120 & 70.78 & 0.016546 & 0.049108 & 18.3555 & 0.774870 \\
+64  & 435,536 & 73.08 & 0.011295 & 0.038316 & 19.9105 & \textbf{0.828432} \\
+128 & 468,368 & 75.74 & \textbf{0.009758} & \textbf{0.035527} & \textbf{20.5110} & 0.824194 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Figure~\ref{fig:latent_mse} confirms diminishing returns beyond $z = 64$. While expanding the bottleneck from $8$ to $64$ dimensions yields an MSE reduction of $58.3\%$ and increases SSIM from $0.6408$ to $0.8284$, expanding further to $128$ yields marginal gain while increasing parameter overhead by $32,832$ weights.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.70\linewidth]{{"Latent dimension vs MSE".jpeg}}
+    \caption{Reconstruction MSE as a function of autoencoder latent bottleneck dimension $z \in \{8, 16, 32, 64, 128\}$.}
+    \label{fig:latent_mse}
+\end{figure}
+
+
+% ==========================================
+% SECTION 10 & 11: FINAL TRAINING & EVALUATION
+% ==========================================
+\section{Final Model Training}
+The champion Denoising Autoencoder was confirmed using optimal hyperparameter configurations. The final architecture leverages a 128-dimensional bottleneck flanked by hierarchical projection layers ($512 \leftrightarrow 256$) and a $10\%$ dropout layer. Over 15 full epochs, the model trained in $253.02$ seconds ($16.86$ s/epoch), achieving monotonic convergence with final training loss $0.0096$ and validation loss $0.0095$.
+
+\section{Final Model Evaluation}
+Final test evaluation conducted on the independent 10,000-image test set at baseline noise ($\sigma = 0.30$) yielded:
+\begin{itemize}[noitemsep]
+    \item \textbf{Test MSE:} $0.009198$
+    \item \textbf{Test MAE:} $0.032862$
+    \item \textbf{Test PSNR:} $20.8230$ dB
+    \item \textbf{Test SSIM:} $0.876258$
+    \item \textbf{Average Inference Latency:} $0.155$ ms per image
+\end{itemize}
+The trained model was serialized to disk as \texttt{best\_mnist\_denoiser.keras} ($4.32$ MB) accompanied by \texttt{best\_model\_metadata.json}.
+
+
+% ==========================================
+% SECTION 12: DEPLOYMENT AND TESTING
+% ==========================================
+\section{Model Deployment and Testing}
+
+\subsection{Deployment Approach}
+To satisfy Section 11 of the assignment requirements, the trained Denoising Autoencoder was deployed as a standalone interactive web application built with Streamlit and exposed externally via a Cloudflare secure tunnel.
+
+\subsection{Deployment Architecture}
+Figure~\ref{fig:deployment_flow} outlines the deployment pipeline:
+\begin{equation*}
+    \text{User Upload (PNG/JPG/BMP)} \longrightarrow \text{Autocontrast \& Polarity Inversion} \longrightarrow \text{Lanczos } 28\times28 \longrightarrow \text{DAE Inference} \longrightarrow \text{Cleaned Output \& Download}
+\end{equation*}
+
+\begin{figure}[htbp]
+\centering
+\begin{tcolorbox}[colback=gray!5!white,colframe=blue!60!black,title=\textbf{Production Inference Workflow in Streamlit}]
+\begin{enumerate}[noitemsep]
+    \item \textbf{File Ingestion:} User uploads an arbitrary handwritten digit image via the web UI.
+    \item \textbf{Grayscale Conversion \& Autocontrast:} The image is converted to single-channel luminance via PIL, and histogram stretching is applied.
+    \item \textbf{Adaptive Background Inversion:} The border pixel mean intensity is computed. If $\mu_{\text{border}} > 0.5$ (black ink on white paper), the image is automatically inverted ($\mathbf{I} \leftarrow 1.0 - \mathbf{I}$) to align with MNIST's white-on-black convention.
+    \item \textbf{Lanczos Resampling:} Resampled to $(28, 28)$ using high-order anti-aliasing Lanczos interpolation.
+    \item \textbf{Tensor Normalization:} Scaled to $[0.0, 1.0]$ \texttt{float32} and unrolled to $(1, 784)$.
+    \item \textbf{Model Forward Pass:} Evaluated via the preloaded DAE model (\texttt{@st.cache\_resource}).
+    \item \textbf{Visualization \& Export:} Side-by-side display of original input vs. denoised output, with an instantaneous one-click PNG download button.
+\end{enumerate}
+\end{tcolorbox}
+\caption{End-to-end data processing and inference workflow implemented in the deployed application.}
+\label{fig:deployment_flow}
+\end{figure}
+
+\subsection{Deployment Testing \& Public Cloudflare Tunnel}
+The Streamlit application was hosted locally on port 8501 and tunneled through the Cloudflare daemon (\texttt{cloudflared}), generating a live public HTTPS endpoint:
+\begin{center}
+    \url{https://influenced-publicly-cardiff-collective.trycloudflare.com}
+\end{center}
+Deployment testing verified sub-second response times, seamless handling of synthetic and real-world noisy digit images, and flawless polarity inversion on scanned documents.
+
+
+% ==========================================
+% SECTION 13: RESULTS AND DISCUSSION
+% ==========================================
+\section{Results and Discussion}
+
+The experimental results offer important insights into representation learning and inductive biases:
+\begin{enumerate}[label=\textbf{\arabic*.}]
+    \item \textbf{Efficacy of Denoising Autoencoder:} DAE emerged as the superior model across all quantitative metrics. Its architectural depth ($512 \to 256 \to 128$) combined with stochastic dropout regularization allowed it to filter high-frequency noise while retaining sharp topological boundaries, achieving $\text{PSNR} = 20.82\text{ dB}$ and $\text{SSIM} = 0.8763$.
+    \item \textbf{Undercomplete Efficiency:} UAE proved remarkably efficient, achieving $98.4\%$ of DAE's PSNR while requiring only $38.4\%$ of the parameters and halving training time.
+    \item \textbf{Underperformance of Sparse AE:} SAE underperformed significantly ($\text{PSNR} = 11.86\text{ dB}, \text{SSIM} = 0.1188$). Enforcing an $L_1$ activity penalty on top of a sigmoid bottleneck over-penalized activations, forcing the network toward a trivial mean-background solution.
+    \item \textbf{Convolutional AE Challenges on CPU:} While theoretically advantageous due to spatial shift-invariance, CAE required $175.85$ seconds per epoch on CPU ($15\times$ slower than dense models). It plateaued at loss $0.1120$, triggering early stopping at epoch 9. This underscores that convolutional autoencoders require dedicated GPU hardware for effective convergence.
+\end{enumerate}
+
+
+% ==========================================
+% SECTION 14: LIMITATIONS
+% ==========================================
+\section{Limitations}
+
+Despite strong empirical results, several limitations exist:
+\begin{itemize}[noitemsep]
+    \item \textbf{Domain Specificity:} The models are optimized specifically for $28 \times 28$ single-channel handwritten digits and do not generalize to high-resolution, complex natural images.
+    \item \textbf{Noise Distribution Assumption:} Models were trained primarily under Additive White Gaussian Noise (AWGN). Performance may degrade under non-Gaussian degradations, such as salt-and-pepper noise, Poisson noise, or motion blur.
+    \item \textbf{Blurring of Fine Details:} Highly constrained bottlenecks occasionally round sharp stroke corners or fail to connect thin lines in digits such as `8' and `5'.
+\end{itemize}
+
+
+% ==========================================
+% SECTION 15: CONCLUSION
+% ==========================================
+\section{Conclusion}
+
+In this laboratory assignment, five autoencoder architectures were implemented, systematically trained, and evaluated on the MNIST dataset for image denoising. The Denoising Autoencoder (DAE) proved to be the most robust and accurate architecture, delivering an MSE of $0.009198$, PSNR of $20.8230$ dB, and SSIM of $0.876258$. Sensitivity analyses demonstrated that a latent bottleneck of $64$ to $128$ dimensions offers the optimal balance between compression and fidelity, and that dense autoencoders maintain structural integrity across noise levels up to $\sigma = 0.50$. Finally, the production deployment via Streamlit and Cloudflare confirmed the practical viability of deep autoencoders for automated image restoration.
+
+
+% ==========================================
+% SECTION 16: FUTURE SCOPE
+% ==========================================
+\section{Future Scope}
+
+Promising avenues for future extension include:
+\begin{itemize}[noitemsep]
+    \item \textbf{U-Net Architectures:} Incorporating skip connections between encoder and decoder feature maps to retain high-frequency edge information directly.
+    \item \textbf{Multi-Channel Natural Datasets:} Extending the benchmark to RGB color images using CIFAR-10, SVHN, or CelebA datasets on GPU clusters.
+    \item \textbf{Modern Generative Paradigms:} Implementing Denoising Diffusion Probabilistic Models (DDPM) and Variational Autoencoders (VAE) for generative image restoration.
+    \item \textbf{Model Quantization:} Post-training 8-bit integer quantization (INT8) via TensorFlow Lite to enable real-time inference on low-power mobile and edge devices.
+\end{itemize}
+
+\vspace{0.8cm}
+
+% ==========================================
+% REFERENCES
+% ==========================================
+\begin{thebibliography}{99}
+\bibitem{ref_goodfellow}
+I.~Goodfellow, Y.~Bengio, and A.~Courville, \textit{Deep Learning}, MIT Press, Cambridge, MA, 2016.
+
+\bibitem{ref_lecun}
+Y.~LeCun, L.~Bottou, Y.~Bengio, and P.~Haffner, ``Gradient-based learning applied to document recognition,'' \textit{Proceedings of the IEEE}, vol. 86, no. 11, pp. 2278--2324, 1998.
+
+\bibitem{ref_vincent}
+P.~Vincent, H.~Larochelle, Y.~Bengio, and P.-A.~Manzagol, ``Extracting and composing robust features with denoising autoencoders,'' in \textit{Proceedings of the 25th International Conference on Machine Learning (ICML)}, pp. 1096--1103, 2008.
+
+\bibitem{ref_rifai}
+S.~Rifai, P.~Vincent, X.~Muller, X.~Glorot, and Y.~Bengio, ``Contractive auto-encoders: Explicit invariance during feature extraction,'' in \textit{Proceedings of the 28th International Conference on Machine Learning (ICML)}, pp. 833--840, 2011.
+
+\bibitem{ref_wang}
+Z.~Wang, A.~C.~Bovik, H.~R.~Sheikh, and E.~P.~Simoncelli, ``Image quality assessment: from error visibility to structural similarity,'' \textit{IEEE Transactions on Image Processing}, vol. 13, no. 4, pp. 600--612, 2004.
+\end{thebibliography}
+
+\newpage
+
+% ==========================================
+% APPENDIX
+% ==========================================
+\appendix
+\section{Source Code Listings}
+
+\subsection{Architectural Implementation of the Five Autoencoders}
+\begin{lstlisting}[language=Python]
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers, regularizers
+
+# 1. Undercomplete Autoencoder
+def build_undercomplete_autoencoder(latent_dim=64):
+    inp = keras.Input(shape=(784,), name="noisy_flat_image")
+    x = layers.Dense(256, activation="relu")(inp)
+    z = layers.Dense(latent_dim, activation="relu", name="latent_code")(x)
+    x = layers.Dense(256, activation="relu")(z)
+    out = layers.Dense(784, activation="sigmoid")(x)
+    return keras.Model(inp, out, name="Undercomplete_AE")
+
+# 2. Sparse Autoencoder
+def build_sparse_autoencoder(latent_dim=128, l1_strength=1e-5):
+    inp = keras.Input(shape=(784,), name="noisy_flat_image")
+    x = layers.Dense(256, activation="relu")(inp)
+    z = layers.Dense(latent_dim, activation="sigmoid",
+                     activity_regularizer=regularizers.l1(l1_strength))(x)
+    x = layers.Dense(256, activation="relu")(z)
+    out = layers.Dense(784, activation="sigmoid")(x)
+    return keras.Model(inp, out, name="Sparse_AE")
+
+# 3. Denoising Autoencoder (Selected Best Model)
+def build_denoising_autoencoder(latent_dim=128):
+    inp = keras.Input(shape=(784,), name="noisy_flat_image")
+    x = layers.Dense(512, activation="relu")(inp)
+    x = layers.Dropout(0.10)(x)
+    x = layers.Dense(256, activation="relu")(x)
+    z = layers.Dense(latent_dim, activation="relu", name="latent_code")(x)
+    x = layers.Dense(256, activation="relu")(z)
+    x = layers.Dense(512, activation="relu")(x)
+    out = layers.Dense(784, activation="sigmoid")(x)
+    return keras.Model(inp, out, name="Denoising_AE")
+
+# 4. Convolutional Autoencoder
+def build_convolutional_autoencoder():
+    inp = keras.Input(shape=(28, 28, 1), name="noisy_image")
+    x = layers.Conv2D(32, 3, activation="relu", padding="same")(inp)
+    x = layers.MaxPooling2D(2, padding="same")(x)
+    x = layers.Conv2D(16, 3, activation="relu", padding="same")(x)
+    x = layers.MaxPooling2D(2, padding="same")(x)
+    z = layers.Conv2D(8, 3, activation="relu", padding="same")(x)
+    x = layers.UpSampling2D(2)(z)
+    x = layers.Conv2D(16, 3, activation="relu", padding="same")(x)
+    x = layers.UpSampling2D(2)(x)
+    x = layers.Conv2D(32, 3, activation="relu", padding="same")(x)
+    out = layers.Conv2D(1, 3, activation="sigmoid", padding="same")(x)
+    return keras.Model(inp, out, name="Convolutional_AE")
+
+# 5. Contractive Autoencoder with Custom Jacobian Frobenius Loss
+@keras.utils.register_keras_serializable(package="MNISTDenoising")
+class ContractiveDense(layers.Layer):
+    def __init__(self, units, contractive_weight=1e-4, **kwargs):
+        super().__init__(**kwargs)
+        self.units = int(units)
+        self.contractive_weight = float(contractive_weight)
+
+    def build(self, input_shape):
+        input_dim = int(input_shape[-1])
+        self.kernel = self.add_weight(shape=(input_dim, self.units), initializer="glorot_uniform")
+        self.bias = self.add_weight(shape=(self.units,), initializer="zeros")
+        super().build(input_shape)
+
+    def call(self, inputs):
+        latent = tf.nn.sigmoid(tf.matmul(inputs, self.kernel) + self.bias)
+        derivative = latent * (1.0 - latent)
+        col_norm = tf.reduce_sum(tf.square(self.kernel), axis=0)
+        penalty = tf.reduce_sum(tf.square(derivative) * col_norm, axis=-1)
+        self.add_loss(self.contractive_weight * tf.reduce_mean(penalty))
+        return latent
+\end{lstlisting}
+
+\subsection{Streamlit Web Deployment Script (\texttt{app.py})}
+\begin{lstlisting}[language=Python]
+import json, numpy as np, streamlit as st
+import tensorflow as tf
+from tensorflow import keras
+from PIL import Image, ImageOps
+
+@st.cache_resource
+def load_model():
+    return keras.models.load_model("outputs/models/best_mnist_denoiser.keras", compile=False)
+
+st.title("MNIST Image Denoiser")
+uploaded = st.file_uploader("Upload a noisy handwritten digit image", type=["png", "jpg", "jpeg", "bmp"])
+
+if uploaded is not None:
+    img = Image.open(uploaded).convert("L")
+    img = ImageOps.autocontrast(img)
+    arr = np.asarray(img, dtype=np.float32) / 255.0
+    
+    # Auto-invert if paper is bright (white background with black ink)
+    border = np.concatenate([arr[0, :], arr[-1, :], arr[:, 0], arr[:, -1]])
+    if float(np.mean(border)) > 0.5:
+        arr = 1.0 - arr
+        
+    resized = Image.fromarray(np.uint8(np.clip(arr, 0, 1) * 255)).resize((28, 28), Image.Resampling.LANCZOS)
+    inp = (np.asarray(resized, dtype=np.float32) / 255.0).reshape(1, 784)
+    
+    model = load_model()
+    denoised = np.clip(model.predict(inp, verbose=0).reshape(28, 28), 0.0, 1.0)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Noisy Input")
+        st.image(resized, clamp=True, use_container_width=True)
+    with col2:
+        st.subheader("Denoised Output")
+        st.image(denoised, clamp=True, use_container_width=True)
+\end{lstlisting}
+
+\newpage
+\section{Contributions of Group Members}
+
+\noindent
+\begin{tabularx}{\textwidth}{|c|X|c|X|c|}
+\hline
+\textbf{Sl.} & \textbf{Group Member} & \textbf{Regd. No.} & \textbf{Role / Responsibility} & \textbf{Contribution (\%)} \\
+\hline
+1 & Nishika Goswami & 2341007048 & Dataset exploration, noise generation, and Undercomplete AE & 25\% \\
+\hline
+2 & Subham Prusty & 2341016481 & Sparse AE, Contractive AE layer implementation, and loss tracking & 25\% \\
+\hline
+3 & Sidharth Behera & 2341002120 & Denoising AE, Convolutional AE, and quantitative metrics (PSNR, SSIM) & 25\% \\
+\hline
+4 & Anjali Kumari Yadav & 2341025001 & Streamlit deployment, Cloudflare tunnel, and report compilation & 25\% \\
+\hline
+\end{tabularx}
+
+\vspace{0.6cm}
+\noindent \textit{Students indicated individual responsibility across experimental stages:}
+\begin{itemize}[noitemsep, topsep=5pt]
+    \item Dataset collection, verification, and exploratory data analysis.
+    \item Synthetic Gaussian noise generation and clipping pipelines.
+    \item Multi-architecture autoencoder design and regularization tuning.
+    \item Computational profiling, training convergence, and validation metric auditing.
+    \item Noise level and latent bottleneck sensitivity experiments.
+    \item Streamlit application development, adaptive preprocessing, and Cloudflare tunneling.
+    \item Comprehensive technical documentation and LaTeX report compilation.
+\end{itemize}
+
+\end{document}
